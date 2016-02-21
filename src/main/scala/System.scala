@@ -901,9 +901,12 @@ abstract class ClientNode extends Node[Null] with PubSubClient with AggregateCom
    */
   def routeWithTimeout(command: Command) = {
     streaming = command.streaming
-    if (!streaming && commandTimeout > 0) {
+    val timeout = if(command.name == "BLPOP" || command.name == "BRPOP"
+                  || command.name == "BRPOPLPUSH") 0
+                  else commandTimeout
+    if (!streaming && timeout > 0) {
       val id = command.id
-      context.system.scheduler.scheduleOnce(commandTimeout milliseconds) {
+      context.system.scheduler.scheduleOnce(timeout milliseconds) {
         commands.remove(id) match {
           case Some(c) => respondFinal(ErrorReply(s"Timeout on $c"))
           case None    =>

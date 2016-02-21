@@ -288,7 +288,7 @@ trait CommandProcessing extends Actor {
    * the command's destination (usually a ClientNode sending a
    * Command).
    */
-  def respond(response: Any): Unit = {
+  def respond(response: Any, currentCommand: Command = command): Unit = {
     if (debug) {
       def path(x: ActorRef): String = x.path.toString.replace("akka://curiodb/user/", "")
       println(Seq(
@@ -302,7 +302,7 @@ trait CommandProcessing extends Actor {
       ).mkString("\n"))
     }
     if (response != ()) {
-      command.client.foreach {client => client ! Response(response, command.id)}
+      currentCommand.client.foreach {client => client ! Response(response, currentCommand.id)}
     }
   }
 

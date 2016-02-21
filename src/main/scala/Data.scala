@@ -4,6 +4,7 @@
 
 package curiodb
 
+import akka.actor.{Cancellable, ActorRef}
 import com.dictiography.collections.{IndexedTreeMap, IndexedTreeSet}
 import net.agkn.hll.HLL
 import scala.collection.JavaConversions._
@@ -183,7 +184,7 @@ class ListNode extends Node[mutable.ListBuffer[String]] {
   /**
    * Set of blocked Command instances awaiting a response.
    */
-  var blocked = mutable.LinkedHashSet[Command]()
+  val blocked = mutable.LinkedHashMap[Command, Option[Cancellable]]()
 
   /**
    * Called on each of the blocking commands, storing the received
@@ -193,11 +194,15 @@ class ListNode extends Node[mutable.ListBuffer[String]] {
    */
   def block(): Any = {
     if (value.isEmpty) {
-      blocked += command
-      context.system.scheduler.scheduleOnce(args.last.toInt seconds) {
-        blocked -= command
-        respond(null)
-      }
+      val timeout = args.last.toInt
+      val cancellable =
+        if (timeout > 0)
+          Some(context.system.scheduler.scheduleOnce(timeout seconds) {
+            blocked -= command
+            respond(null)
+          })
+        else None
+      blocked += (command -> cancellable)
       ()
     } else run(command.name.tail)  // Run the non-blocking version.
   }
@@ -211,9 +216,10 @@ class ListNode extends Node[mutable.ListBuffer[String]] {
     while (value.nonEmpty && blocked.nonEmpty) {
       // Set the node's current Command to the blocked Command, so
       // that the run method has access to the correct Command.
-      command = blocked.head
+      val (command, cancellable) = blocked.head
+      cancellable.map(_.cancel())
       blocked -= command
-      respond(run(command.name.tail))
+      respond(run(command.name.tail), command)
     }
     result
   }
